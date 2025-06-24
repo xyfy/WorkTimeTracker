@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="WorkTimeTracker.UI.MainPage"
+             Title="工作计时器"
+             >
+
+    <VerticalStackLayout Spacing="15" Padding="20">
+        <!-- 配置信息，仅在未开始工作时可编辑 -->
+        <HorizontalStackLayout>
+            <Label Text="工作时长(分钟):" FontSize="20"/>
+            <Entry x:Name="WorkDurationEntry" Keyboard="Numeric" Text="50"/>
+        </HorizontalStackLayout>
+        <HorizontalStackLayout>
+            <Label Text="休息时长(分钟):" FontSize="20"/>
+            <Entry x:Name="RestDurationEntry" Keyboard="Numeric" Text="10"/>
+        </HorizontalStackLayout>
+        <HorizontalStackLayout>
+            <Label Text="剩余时间：" FontSize="20"/>
+            <Label x:Name="RemainingTimeLabel" FontSize="20"/>
+        </HorizontalStackLayout>
+        <HorizontalStackLayout>
+            <Label Text="今日工作时间：" FontSize="20"/>
+            <Label x:Name="TotalWorkTimeLabel" FontSize="20"/>
+        </HorizontalStackLayout>
+        <Button x:Name="ToggleWorkButton" Text="开始工作" Clicked="OnToggleWork"/>
+        <!-- 新增按钮切换到时间表页面 -->
+        <Button Text="查看时间表数据" Clicked="OnViewScheduleButtonClicked"/>
+    </VerticalStackLayout>
+</ContentPage>
