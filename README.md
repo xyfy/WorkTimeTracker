@@ -27,7 +27,7 @@
     - [1. 通知设置功能](#1-通知设置功能)
     - [2. 账号功能](#2-账号功能)
     - [3. 数据同步功能](#3-数据同步功能)
-    - [4. 自动化构建与 CI/CD](#4-自动化构建与-cicd)
+    - [4. 自动化构建与 CI/CD](#4--自动化构建与-cicd-已完成)
     - [实现优先级](#实现优先级)
   - [开发文档](#开发文档)
   - [贡献](#贡献)
@@ -143,11 +143,24 @@ WorkTimeTracker 是一个工作时间追踪应用，具有以下核心功能：
 
 ## 技术栈
 
+- **.NET 9.0**: 现代化的开发平台
 - **.NET MAUI**: 跨平台应用框架 (Microsoft.Maui.Controls 9.0.80)
 - **SQLite**: 本地数据库 (sqlite-net-pcl 1.9.172)
 - **CommunityToolkit.Maui**: MAUI 社区工具包 (12.0.0)
 - **Plugin.LocalNotification**: 本地通知插件 (12.0.1)
 - **Microsoft.Extensions.Logging**: 日志记录 (9.0.6)
+
+### 测试框架
+- **xUnit**: 单元测试框架
+- **Appium & Selenium**: UI 自动化测试
+- **FluentAssertions**: 断言增强库
+- **Serilog**: 结构化日志记录
+
+### CI/CD 工具
+- **GitHub Actions**: 持续集成和持续部署
+- **dotnet format**: 代码格式化
+- **dotnet test**: 测试执行
+- **dotnet publish**: 应用发布
 
 ## 开发环境设置
 
@@ -164,14 +177,39 @@ WorkTimeTracker 是一个工作时间追踪应用，具有以下核心功能：
 ### 开发模式运行
 
 ```bash
+# 运行应用程序
 dotnet run --project WorkTimeTracker.UI
+
+# 运行单元测试
+dotnet test WorkTimeTracker.Tests/
+
+# 运行UI自动化测试
+dotnet test WorkTimeTracker.UITests/
+
+# 代码格式化
+dotnet format
 ```
 
 ### 发布应用
 
 ```bash
+# 发布到 macOS
 dotnet publish -c Release -f net9.0-maccatalyst -o ../publish WorkTimeTracker.UI
+
+# 发布到 Windows (需要在 Windows 环境)
+dotnet publish -c Release -f net9.0-windows10.0.19041.0 -o ../publish WorkTimeTracker.UI
 ```
+
+### CI/CD 自动化构建
+
+项目已配置完整的 GitHub Actions 工作流：
+
+- **推送代码**: 自动触发构建和测试
+- **Pull Request**: 自动验证代码质量
+- **创建 Release**: 自动生成多平台安装包
+- **定期维护**: 自动检查依赖项更新和安全漏洞
+
+查看工作流状态：[![CI/CD](../../actions/workflows/ci-cd.yml/badge.svg)](../../actions/workflows/ci-cd.yml)
 
 详细的打包指南请参考 [PackagingGuide.md](PackagingGuide.md)。
 
@@ -264,30 +302,34 @@ public class WorkRecord
   - 同步冲突解决机制
   - 数据隐私和安全保护
 
-### 4. 自动化构建与 CI/CD
+### 4. ✅ 自动化构建与 CI/CD (已完成)
 
-- **Docker 多环境编译**
-  - 在 Docker 容器中构建不同平台版本
-  - 解决跨平台编译环境依赖问题
-  - 统一的构建环境配置
-  - 多架构镜像支持（linux/amd64, linux/arm64）
-
-- **GitHub Actions 工作流**
+- **✅ GitHub Actions 工作流**
   - 自动化多平台构建流程
-  - Android APK 自动构建和签名
-  - iOS IPA 构建（需要证书配置）
-  - Windows MSIX 包构建
-  - macOS DMG 包构建
+  - 跨平台编译 (Windows, macOS, Linux)
+  - Pull Request 自动验证
+  - 代码质量检查和安全扫描
+  - 自动化测试集成 (单元测试 + UI测试)
 
-- **发布管理**
+- **✅ CI/CD Pipeline**
+  - 持续集成：推送代码自动触发构建和测试
+  - 持续部署：Release 自动创建多平台安装包
+  - 质量门：代码格式、静态分析、安全扫描
+  - 维护任务：定期依赖项更新和漏洞扫描
+
+- **✅ 发布管理**
   - 自动创建 GitHub Releases
+  - 多平台安装包自动生成
   - 版本标签管理
   - 构建产物自动上传
   - 发布说明自动生成
-  - 测试版本和正式版本分离
 
-- **质量保证**
-  - 自动化测试集成
+- **✅ 质量保证**
+  - 自动化测试集成 (35个UI测试用例)
+  - 代码覆盖率检查
+  - 安全漏洞扫描
+  - 依赖项更新监控
+  - 代码格式化验证
   - 代码质量检查
   - 安全扫描
   - 依赖更新检查

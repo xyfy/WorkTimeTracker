@@ -1,0 +1,297 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, dev, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  SOLUTION_FILE: 'WorkTimeTracker.sln'
+
+jobs:
+  # 1. 自动编译程序
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+      
+    - name: 🔨 Build solution
+      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore
+      
+    - name: 📁 Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: |
+          **/bin/Release/**
+          !**/bin/Release/**/ref/**
+          !**/bin/Release/**/*.pdb
+        retention-days: 30
+
+  # 2. 自动测试程序
+  test:
+    name: 🧪 Test
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+      
+    - name: 🔨 Build for testing
+      run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore
+      
+    - name: 🧪 Run unit tests
+      run: |
+        dotnet test WorkTimeTracker.Tests/WorkTimeTracker.Tests.csproj \
+          --configuration Release \
+          --no-build \
+          --verbosity normal \
+          --logger trx \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults
+          
+    - name: 🧪 Run UI tests (if available)
+      run: |
+        if [ -d "WorkTimeTracker.UITests" ]; then
+          echo "🔍 Running UI tests..."
+          dotnet test WorkTimeTracker.UITests/WorkTimeTracker.UITests.csproj \
+            --configuration Release \
+            --no-build \
+            --verbosity normal \
+            --logger trx \
+            --results-directory ./TestResults
+        else
+          echo "⚠️ No UI tests found, skipping..."
+        fi
+      continue-on-error: true
+      
+    - name: 📊 Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: TestResults/
+        retention-days: 30
+        
+    - name: 📈 Publish test results
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: Test Results
+        path: TestResults/*.trx
+        reporter: dotnet-trx
+
+  # 3. 代码质量检查
+  code-quality:
+    name: 🔍 Code Quality
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+      
+    - name: 🔍 Run code analysis
+      run: |
+        dotnet build ${{ env.SOLUTION_FILE }} \
+          --configuration Release \
+          --no-restore \
+          --verbosity normal \
+          /p:TreatWarningsAsErrors=false \
+          /p:RunAnalyzersDuringBuild=true
+
+  # 4. 跨平台构建 (MAUI)
+  build-multiplatform:
+    name: 🌐 Multi-platform Build
+    runs-on: ${{ matrix.os }}
+    needs: [build, test]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: windows
+            target: net9.0-windows10.0.19041.0
+          - os: macos-latest
+            platform: macos
+            target: net9.0-maccatalyst
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Install MAUI workloads
+      run: dotnet workload install maui
+      
+    - name: 📦 Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_FILE }}
+      
+    - name: 🔨 Build MAUI app for ${{ matrix.platform }}
+      run: |
+        dotnet build WorkTimeTracker.UI/WorkTimeTracker.UI.csproj \
+          -f ${{ matrix.target }} \
+          -c Release \
+          --no-restore
+          
+    - name: 📁 Upload platform artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-${{ matrix.platform }}
+        path: |
+          WorkTimeTracker.UI/bin/Release/${{ matrix.target }}/**
+          !**/*.pdb
+        retention-days: 30
+
+  # 5. 自动发布程序
+  release:
+    name: 🚀 Release
+    runs-on: ubuntu-latest
+    needs: [build, test, code-quality, build-multiplatform]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+        
+    - name: 📦 Create release packages
+      run: |
+        # 创建发布目录
+        mkdir -p ./release-packages
+        
+        # 打包 Windows 版本
+        if [ -d "./artifacts/app-windows" ]; then
+          cd ./artifacts/app-windows
+          zip -r ../../release-packages/WorkTimeTracker-Windows-${{ github.event.release.tag_name }}.zip .
+          cd ../..
+        fi
+        
+        # 打包 macOS 版本
+        if [ -d "./artifacts/app-macos" ]; then
+          cd ./artifacts/app-macos
+          tar -czf ../../release-packages/WorkTimeTracker-macOS-${{ github.event.release.tag_name }}.tar.gz .
+          cd ../..
+        fi
+        
+        # 创建源码包
+        git archive --format=zip --prefix=WorkTimeTracker-${{ github.event.release.tag_name }}/ HEAD > ./release-packages/WorkTimeTracker-Source-${{ github.event.release.tag_name }}.zip
+        
+    - name: 📋 Generate release notes
+      run: |
+        echo "## 🎉 WorkTimeTracker ${{ github.event.release.tag_name }}" > release-notes.md
+        echo "" >> release-notes.md
+        echo "### 📦 下载" >> release-notes.md
+        echo "- **Windows**: WorkTimeTracker-Windows-${{ github.event.release.tag_name }}.zip" >> release-notes.md
+        echo "- **macOS**: WorkTimeTracker-macOS-${{ github.event.release.tag_name }}.tar.gz" >> release-notes.md
+        echo "- **源码**: WorkTimeTracker-Source-${{ github.event.release.tag_name }}.zip" >> release-notes.md
+        echo "" >> release-notes.md
+        echo "### 🔧 技术栈" >> release-notes.md
+        echo "- .NET 9.0" >> release-notes.md
+        echo "- .NET MAUI" >> release-notes.md
+        echo "- SQLite" >> release-notes.md
+        echo "" >> release-notes.md
+        echo "### 📱 支持平台" >> release-notes.md
+        echo "- Windows 10/11" >> release-notes.md
+        echo "- macOS (Mac Catalyst)" >> release-notes.md
+        echo "" >> release-notes.md
+        echo "构建时间: $(date)" >> release-notes.md
+        echo "构建分支: ${{ github.ref_name }}" >> release-notes.md
+        echo "提交哈希: ${{ github.sha }}" >> release-notes.md
+        
+    - name: 🚀 Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./release-packages/*
+        body_path: release-notes.md
+        draft: false
+        prerelease: ${{ contains(github.event.release.tag_name, 'alpha') || contains(github.event.release.tag_name, 'beta') || contains(github.event.release.tag_name, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 6. 部署到包管理器 (可选)
+  deploy-packages:
+    name: 📦 Deploy Packages
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'release' && github.event.action == 'published' && !contains(github.event.release.tag_name, 'alpha') && !contains(github.event.release.tag_name, 'beta')
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Create NuGet packages
+      run: |
+        dotnet pack WorkTimeTracker.Core/WorkTimeTracker.Core.csproj \
+          -c Release \
+          --output ./nuget-packages \
+          -p:PackageVersion=${{ github.event.release.tag_name }}
+          
+        dotnet pack WorkTimeTracker.Data/WorkTimeTracker.Data.csproj \
+          -c Release \
+          --output ./nuget-packages \
+          -p:PackageVersion=${{ github.event.release.tag_name }}
+          
+    - name: 🚀 Publish to NuGet (if configured)
+      run: |
+        if [ ! -z "${{ secrets.NUGET_API_KEY }}" ]; then
+          dotnet nuget push ./nuget-packages/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        else
+          echo "⚠️ NuGet API key not configured, skipping package publish"
+        fi

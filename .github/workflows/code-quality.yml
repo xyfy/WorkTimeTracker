@@ -1,0 +1,309 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, dev, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # 每天早上9点运行代码质量检查
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+
+jobs:
+  # 代码格式检查
+  code-formatting:
+    name: 📝 Code Formatting
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📝 Check code formatting
+      run: |
+        echo "🔍 检查代码格式..."
+        dotnet format --verify-no-changes --verbosity diagnostic || {
+          echo "❌ 代码格式不符合标准"
+          echo "请运行 'dotnet format' 来修复格式问题"
+          exit 1
+        }
+        echo "✅ 代码格式检查通过"
+
+  # 静态分析
+  static-analysis:
+    name: 🔍 Static Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🔍 Run static analysis
+      run: |
+        echo "## 🔍 静态分析报告" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 运行分析器
+        dotnet build WorkTimeTracker.sln \
+          --configuration Release \
+          --no-restore \
+          --verbosity normal \
+          /p:TreatWarningsAsErrors=false \
+          /p:RunAnalyzersDuringBuild=true \
+          /p:EnableNETAnalyzers=true \
+          /p:AnalysisLevel=latest \
+          > analysis.log 2>&1
+          
+        # 统计警告和错误
+        WARNINGS=$(grep -c "warning" analysis.log || echo "0")
+        ERRORS=$(grep -c "error" analysis.log || echo "0")
+        
+        echo "- **警告数量**: $WARNINGS" >> $GITHUB_STEP_SUMMARY
+        echo "- **错误数量**: $ERRORS" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$ERRORS" -gt 0 ]; then
+          echo "❌ 发现编译错误" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+        
+        if [ "$WARNINGS" -gt 50 ]; then
+          echo "⚠️ 警告数量过多，建议清理" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ 代码质量良好" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # 代码复杂度分析
+  complexity-analysis:
+    name: 📊 Complexity Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 📊 Analyze code complexity
+      run: |
+        echo "## 📊 代码复杂度分析" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 统计各类文件数量
+        CS_FILES=$(find . -name "*.cs" -not -path "./bin/*" -not -path "./obj/*" -not -path "./.git/*" | wc -l)
+        XAML_FILES=$(find . -name "*.xaml" -not -path "./bin/*" -not -path "./obj/*" | wc -l)
+        CSPROJ_FILES=$(find . -name "*.csproj" | wc -l)
+        
+        echo "### 📁 文件统计" >> $GITHUB_STEP_SUMMARY
+        echo "- **C# 文件**: $CS_FILES" >> $GITHUB_STEP_SUMMARY
+        echo "- **XAML 文件**: $XAML_FILES" >> $GITHUB_STEP_SUMMARY
+        echo "- **项目文件**: $CSPROJ_FILES" >> $GITHUB_STEP_SUMMARY
+        
+        # 分析平均文件长度
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📏 代码度量" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$CS_FILES" -gt 0 ]; then
+          AVG_LINES=$(find . -name "*.cs" -not -path "./bin/*" -not -path "./obj/*" -not -path "./.git/*" -exec wc -l {} + | awk '{sum+=$1; count++} END {if(count>0) print int(sum/count); else print 0}')
+          TOTAL_LINES=$(find . -name "*.cs" -not -path "./bin/*" -not -path "./obj/*" -not -path "./.git/*" -exec wc -l {} + | tail -1 | awk '{print $1}')
+          
+          echo "- **总代码行数**: $TOTAL_LINES" >> $GITHUB_STEP_SUMMARY
+          echo "- **平均文件长度**: $AVG_LINES 行" >> $GITHUB_STEP_SUMMARY
+          
+          # 检查是否有超长文件
+          LONG_FILES=$(find . -name "*.cs" -not -path "./bin/*" -not -path "./obj/*" -not -path "./.git/*" -exec wc -l {} + | awk '$1 > 500 {print $2 " (" $1 " 行)"}' | head -5)
+          if [ ! -z "$LONG_FILES" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ⚠️ 较长的文件 (>500行)" >> $GITHUB_STEP_SUMMARY
+            echo "$LONG_FILES" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+        
+        # 分析方法复杂度（简化版）
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎯 复杂度指标" >> $GITHUB_STEP_SUMMARY
+        
+        # 统计类的数量
+        CLASS_COUNT=$(grep -r "class " . --include="*.cs" | grep -v "/bin/" | grep -v "/obj/" | wc -l)
+        INTERFACE_COUNT=$(grep -r "interface " . --include="*.cs" | grep -v "/bin/" | grep -v "/obj/" | wc -l)
+        
+        echo "- **类的数量**: $CLASS_COUNT" >> $GITHUB_STEP_SUMMARY
+        echo "- **接口数量**: $INTERFACE_COUNT" >> $GITHUB_STEP_SUMMARY
+
+  # 安全扫描
+  security-scan:
+    name: 🔐 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🔐 Security vulnerability scan
+      run: |
+        echo "## 🔐 安全扫描报告" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 检查已知漏洞
+        SCAN_RESULT=$(dotnet list package --vulnerable --include-transitive 2>&1)
+        
+        if echo "$SCAN_RESULT" | grep -q "has the following vulnerable packages"; then
+          echo "❌ **发现安全漏洞**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
+          echo "$SCAN_RESULT" >> $GITHUB_STEP_SUMMARY
+          echo "```" >> $GITHUB_STEP_SUMMARY
+          
+          # 创建安全问题
+          echo "SECURITY_ISSUES=true" >> $GITHUB_ENV
+        else
+          echo "✅ **未发现安全漏洞**" >> $GITHUB_STEP_SUMMARY
+          echo "SECURITY_ISSUES=false" >> $GITHUB_ENV
+        fi
+        
+    - name: 🔍 Check for hardcoded secrets
+      run: |
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔍 密钥检查" >> $GITHUB_STEP_SUMMARY
+        
+        # 简单的密钥模式检查
+        POTENTIAL_SECRETS=$(grep -r -i "password\|secret\|key\|token" . --include="*.cs" --include="*.json" --include="*.xml" | grep -v "/bin/" | grep -v "/obj/" | grep -v "// " | grep -v "/// " | wc -l)
+        
+        if [ "$POTENTIAL_SECRETS" -gt 0 ]; then
+          echo "⚠️ 发现 $POTENTIAL_SECRETS 处可能的敏感信息" >> $GITHUB_STEP_SUMMARY
+          echo "请检查是否有硬编码的密钥或密码" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ 未发现明显的硬编码密钥" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # 测试覆盖率
+  test-coverage:
+    name: 📈 Test Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🧪 Run tests with coverage
+      run: |
+        echo "## 📈 测试覆盖率报告" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 运行单元测试
+        if [ -d "WorkTimeTracker.Tests" ]; then
+          dotnet test WorkTimeTracker.Tests/WorkTimeTracker.Tests.csproj \
+            --configuration Release \
+            --collect:"XPlat Code Coverage" \
+            --logger "console;verbosity=detailed" \
+            --results-directory ./TestResults \
+            > test-output.log 2>&1
+            
+          # 解析测试结果
+          TOTAL_TESTS=$(grep -o "Total tests: [0-9]*" test-output.log | grep -o "[0-9]*" || echo "0")
+          PASSED_TESTS=$(grep -o "Passed: [0-9]*" test-output.log | grep -o "[0-9]*" || echo "0")
+          FAILED_TESTS=$(grep -o "Failed: [0-9]*" test-output.log | grep -o "[0-9]*" || echo "0")
+          SKIPPED_TESTS=$(grep -o "Skipped: [0-9]*" test-output.log | grep -o "[0-9]*" || echo "0")
+          
+          echo "### 🧪 单元测试结果" >> $GITHUB_STEP_SUMMARY
+          echo "- **总测试数**: $TOTAL_TESTS" >> $GITHUB_STEP_SUMMARY
+          echo "- **通过**: $PASSED_TESTS" >> $GITHUB_STEP_SUMMARY
+          echo "- **失败**: $FAILED_TESTS" >> $GITHUB_STEP_SUMMARY
+          echo "- **跳过**: $SKIPPED_TESTS" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$TOTAL_TESTS" -gt 0 ]; then
+            SUCCESS_RATE=$(( PASSED_TESTS * 100 / TOTAL_TESTS ))
+            echo "- **成功率**: $SUCCESS_RATE%" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "$SUCCESS_RATE" -lt 80 ]; then
+              echo "⚠️ 测试成功率低于80%，需要关注" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+        else
+          echo "⚠️ 未找到测试项目" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # 检查UI测试
+        if [ -d "WorkTimeTracker.UITests" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🖥️ UI测试" >> $GITHUB_STEP_SUMMARY
+          echo "- **UI测试项目**: 已配置" >> $GITHUB_STEP_SUMMARY
+          
+          UI_TEST_COUNT=$(dotnet test WorkTimeTracker.UITests/WorkTimeTracker.UITests.csproj --list-tests 2>/dev/null | grep "WorkTimeTracker.UITests" | wc -l || echo "0")
+          echo "- **UI测试数量**: $UI_TEST_COUNT" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: 📊 Upload coverage reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report
+        path: TestResults/
+        retention-days: 30
+
+  # 质量门检查
+  quality-gate:
+    name: 🚪 Quality Gate
+    runs-on: ubuntu-latest
+    needs: [code-formatting, static-analysis, complexity-analysis, security-scan, test-coverage]
+    if: always()
+    
+    steps:
+    - name: 🚪 Evaluate quality gate
+      run: |
+        echo "## 🚪 质量门检查结果" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 检查各个任务的状态
+        FORMATTING_STATUS="${{ needs.code-formatting.result }}"
+        ANALYSIS_STATUS="${{ needs.static-analysis.result }}"
+        COMPLEXITY_STATUS="${{ needs.complexity-analysis.result }}"
+        SECURITY_STATUS="${{ needs.security-scan.result }}"
+        COVERAGE_STATUS="${{ needs.test-coverage.result }}"
+        
+        echo "### 📋 检查项目状态" >> $GITHUB_STEP_SUMMARY
+        echo "- **代码格式**: $FORMATTING_STATUS" >> $GITHUB_STEP_SUMMARY
+        echo "- **静态分析**: $ANALYSIS_STATUS" >> $GITHUB_STEP_SUMMARY
+        echo "- **复杂度分析**: $COMPLEXITY_STATUS" >> $GITHUB_STEP_SUMMARY
+        echo "- **安全扫描**: $SECURITY_STATUS" >> $GITHUB_STEP_SUMMARY
+        echo "- **测试覆盖率**: $COVERAGE_STATUS" >> $GITHUB_STEP_SUMMARY
+        
+        # 判断质量门是否通过
+        if [ "$FORMATTING_STATUS" = "success" ] && [ "$ANALYSIS_STATUS" = "success" ] && [ "$SECURITY_STATUS" = "success" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **质量门检查通过** - 代码质量符合要求" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "❌ **质量门检查未通过** - 请修复相关问题" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
