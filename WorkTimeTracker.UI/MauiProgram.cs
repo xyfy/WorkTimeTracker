@@ -36,9 +36,10 @@ public static class MauiProgram
 
 		// 注册仓库
 		builder.Services.AddSingleton<IWorkRecordRepository, WorkRecordRepository>();
-
 		// 注册核心服务
 		builder.Services.AddSingleton<IWorkTimeService, WorkTimeService>();
+		// 注册通知服务
+		builder.Services.AddSingleton<INotificationService, EnhancedNotificationService>();
 
 		// 注册 UI 服务
 		builder.Services.AddSingleton<ReminderService>();

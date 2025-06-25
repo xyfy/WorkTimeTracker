@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="WorkTimeTracker.UI.NotificationSettingsPage"
+             Title="通知设置">
+
+    <ScrollView>
+        <VerticalStackLayout Spacing="15" Padding="20">
+            
+            <!-- 提醒方式选择 -->
+            <Label Text="提醒方式" FontSize="18" FontAttributes="Bold" />
+            
+            <Frame BackgroundColor="LightGray" Padding="10">
+                <VerticalStackLayout Spacing="10">
+                    <HorizontalStackLayout>
+                        <CheckBox x:Name="VoiceReminderCheckBox" />
+                        <Label Text="语音提醒" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <CheckBox x:Name="SystemNotificationCheckBox" />
+                        <Label Text="系统通知" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <CheckBox x:Name="ForegroundPopupCheckBox" />
+                        <Label Text="前台弹窗提醒" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <CheckBox x:Name="DesktopNotificationCheckBox" />
+                        <Label Text="桌面通知" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- 语音设置 -->
+            <Label Text="语音设置" FontSize="18" FontAttributes="Bold" />
+            
+            <Frame BackgroundColor="LightGray" Padding="10">
+                <VerticalStackLayout Spacing="10">
+                    <HorizontalStackLayout>
+                        <Label Text="音量：" VerticalOptions="Center" />
+                        <Slider x:Name="VolumeSlider" Minimum="0" Maximum="1" Value="0.8" WidthRequest="200" />
+                        <Label x:Name="VolumeLabel" Text="80%" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <Label Text="语言：" VerticalOptions="Center" />
+                        <Picker x:Name="LanguagePicker" WidthRequest="150">
+                            <Picker.Items>
+                                <x:String>zh-CN</x:String>
+                                <x:String>en-US</x:String>
+                                <x:String>ja-JP</x:String>
+                            </Picker.Items>
+                        </Picker>
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- 免打扰设置 -->
+            <Label Text="免打扰设置" FontSize="18" FontAttributes="Bold" />
+            
+            <Frame BackgroundColor="LightGray" Padding="10">
+                <VerticalStackLayout Spacing="10">
+                    <HorizontalStackLayout>
+                        <CheckBox x:Name="DoNotDisturbCheckBox" />
+                        <Label Text="启用免打扰时段" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout x:Name="DoNotDisturbTimeLayout" IsVisible="False">
+                        <Label Text="从" VerticalOptions="Center" />
+                        <TimePicker x:Name="DoNotDisturbStartTimePicker" Time="22:00:00" />
+                        <Label Text="到" VerticalOptions="Center" />
+                        <TimePicker x:Name="DoNotDisturbEndTimePicker" Time="08:00:00" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- 提醒频率 -->
+            <Label Text="提醒频率" FontSize="18" FontAttributes="Bold" />
+            
+            <Frame BackgroundColor="LightGray" Padding="10">
+                <HorizontalStackLayout>
+                    <Label Text="每" VerticalOptions="Center" />
+                    <Entry x:Name="ReminderFrequencyEntry" Keyboard="Numeric" Text="5" WidthRequest="60" />
+                    <Label Text="分钟提醒一次" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Frame>
+
+            <!-- 自定义消息 -->
+            <Label Text="自定义消息" FontSize="18" FontAttributes="Bold" />
+            
+            <Frame BackgroundColor="LightGray" Padding="10">
+                <VerticalStackLayout Spacing="10">
+                    <HorizontalStackLayout>
+                        <Label Text="工作开始：" VerticalOptions="Center" WidthRequest="80" />
+                        <Entry x:Name="WorkStartMessageEntry" Text="开始工作" Placeholder="工作开始提醒" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <Label Text="工作结束：" VerticalOptions="Center" WidthRequest="80" />
+                        <Entry x:Name="WorkEndMessageEntry" Text="工作结束" Placeholder="工作结束提醒" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <Label Text="休息开始：" VerticalOptions="Center" WidthRequest="80" />
+                        <Entry x:Name="RestStartMessageEntry" Text="开始休息" Placeholder="休息开始提醒" />
+                    </HorizontalStackLayout>
+                    
+                    <HorizontalStackLayout>
+                        <Label Text="休息结束：" VerticalOptions="Center" WidthRequest="80" />
+                        <Entry x:Name="RestEndMessageEntry" Text="休息结束" Placeholder="休息结束提醒" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- 操作按钮 -->
+            <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Button Text="保存设置" Clicked="OnSaveSettingsClicked" BackgroundColor="Green" TextColor="White" />
+                <Button Text="测试通知" Clicked="OnTestNotificationClicked" BackgroundColor="Blue" TextColor="White" />
+                <Button Text="重置默认" Clicked="OnResetToDefaultClicked" BackgroundColor="Orange" TextColor="White" />
+            </HorizontalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

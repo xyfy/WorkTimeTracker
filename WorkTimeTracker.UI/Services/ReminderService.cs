@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Maui.Controls;
-using Plugin.LocalNotification;
 using WorkTimeTracker.Core.Interfaces;
 
 namespace WorkTimeTracker.UI.Services
@@ -9,13 +8,15 @@ namespace WorkTimeTracker.UI.Services
     public class ReminderService
     {
         private readonly IWorkTimeService _workTimeService;
+        private readonly INotificationService _notificationService;
 
         public event Action<TimeSpan>? OnTimeRemainingChanged;
         public event Action<string>? OnSegmentChanged;
 
-        public ReminderService(IWorkTimeService workTimeService)
+        public ReminderService(IWorkTimeService workTimeService, INotificationService notificationService)
         {
             _workTimeService = workTimeService;
+            _notificationService = notificationService;
             _workTimeService.OnTimeRemainingChanged += (timeSpan) =>
             {
                 OnTimeRemainingChanged?.Invoke(timeSpan);
@@ -39,13 +40,13 @@ namespace WorkTimeTracker.UI.Services
         public async Task StartWorkAsync()
         {
             await _workTimeService.StartWorkAsync();
-            await SpeakAsync("开始工作");
+            await _notificationService.ShowWorkStartNotificationAsync();
         }
 
         public async Task StopWorkAsync()
         {
             await _workTimeService.StopWorkAsync();
-            await SpeakAsync("工作结束");
+            await _notificationService.ShowWorkEndNotificationAsync();
         }
 
         public async Task<string> GetDailyWorkTimeAsync()
@@ -55,23 +56,7 @@ namespace WorkTimeTracker.UI.Services
 
         public async Task SpeakAsync(string text)
         {
-            try
-            {
-                await TextToSpeech.SpeakAsync(text);
-            }
-            catch
-            {
-                // 如果 TTS 失败，使用本地通知作为备选
-                var notification = new NotificationRequest
-                {
-                    NotificationId = 1001,
-                    Title = "WorkTimeTracker",
-                    Subtitle = text,
-                    Description = text,
-                    BadgeNumber = 1
-                };
-                await LocalNotificationCenter.Current.Show(notification);
-            }
+            await _notificationService.ShowCustomNotificationAsync(text);
         }
 
         public void StartWork()

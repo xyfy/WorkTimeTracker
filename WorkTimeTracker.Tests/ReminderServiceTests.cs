@@ -1,6 +1,5 @@
 using Xunit;
 using Moq;
-using WorkTimeTracker.UI.Services;
 using WorkTimeTracker.Core.Interfaces;
 using System;
 using System.Threading.Tasks;

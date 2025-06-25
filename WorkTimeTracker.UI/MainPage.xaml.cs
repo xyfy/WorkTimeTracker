@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using WorkTimeTracker.UI.Services;
 using WorkTimeTracker.Data;
+using WorkTimeTracker.Core.Interfaces;
 
 namespace WorkTimeTracker.UI;
 
@@ -88,15 +89,23 @@ public partial class MainPage : ContentPage
     private void OnResetTimer(object sender, EventArgs e)
     {
         _reminderService.ResetTimer();
-    }
-
-    // 修改事件处理方法，通过 App.Current 获取依赖服务
+    }    // 修改事件处理方法，通过 App.Current 获取依赖服务
     private async void OnViewScheduleButtonClicked(object sender, EventArgs e)
     {
         var workRecordDb = (Application.Current as App)?.Services.GetService<WorkRecordDatabase>();
         if (workRecordDb != null)
         {
             await Navigation.PushAsync(new SchedulePage(workRecordDb));
+        }
+    }
+
+    // 新增通知设置页面导航
+    private async void OnNotificationSettingsClicked(object sender, EventArgs e)
+    {
+        var notificationService = (Application.Current as App)?.Services.GetService<INotificationService>();
+        if (notificationService != null)
+        {
+            await Navigation.PushAsync(new NotificationSettingsPage(notificationService));
         }
     }
 }
