@@ -24,7 +24,11 @@
             <Label x:Name="TotalWorkTimeLabel" FontSize="20"/>
         </HorizontalStackLayout>
         <Button x:Name="ToggleWorkButton" Text="开始工作" Clicked="OnToggleWork"/>
+        <!-- 语音测试功能 -->
+        <Button Text="🔊 测试语音" Clicked="OnTestVoiceClicked" BackgroundColor="LightGreen"/>
         <!-- 新增按钮切换到时间表页面 -->
         <Button Text="查看时间表数据" Clicked="OnViewScheduleButtonClicked"/>
+        <!-- 新增通知设置按钮 -->
+        <Button Text="通知设置" Clicked="OnNotificationSettingsClicked" BackgroundColor="LightBlue"/>
     </VerticalStackLayout>
 </ContentPage>

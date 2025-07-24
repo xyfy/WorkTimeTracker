@@ -1,0 +1,322 @@
+name: Release Build
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      create_release:
+        description: 'Create GitHub release'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  
+jobs:
+  # Windows 构建
+  build-windows:
+    name: 🪟 Build Windows
+    runs-on: windows-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Install MAUI workloads
+      run: dotnet workload install maui
+      
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🔨 Build Windows app
+      run: |
+        dotnet publish WorkTimeTracker.UI/WorkTimeTracker.UI.csproj `
+          -f net9.0-windows10.0.19041.0 `
+          -c Release `
+          -p:PublishProfile=win-x64 `
+          -p:PublishSingleFile=true `
+          -p:PublishReadyToRun=true `
+          -p:RuntimeIdentifier=win-x64 `
+          --self-contained true `
+          --output ./publish/windows
+          
+    - name: 📦 Create Windows installer
+      run: |
+        # 创建安装包目录结构
+        mkdir -p ./installer/windows
+        Copy-Item -Recurse ./publish/windows/* ./installer/windows/
+        
+        # 创建启动脚本
+        @"
+        @echo off
+        echo Starting WorkTimeTracker...
+        "%~dp0WorkTimeTracker.UI.exe"
+        "@ | Out-File -FilePath "./installer/windows/start.bat" -Encoding ASCII
+        
+        # 创建卸载脚本
+        @"
+        @echo off
+        echo Uninstalling WorkTimeTracker...
+        rmdir /s /q "%~dp0"
+        "@ | Out-File -FilePath "./installer/windows/uninstall.bat" -Encoding ASCII
+        
+    - name: 📁 Create Windows package
+      run: |
+        $VERSION = "${{ github.event.release.tag_name || inputs.version }}"
+        Compress-Archive -Path "./installer/windows/*" -DestinationPath "./WorkTimeTracker-Windows-$VERSION.zip"
+        
+    - name: 📤 Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-package
+        path: "./WorkTimeTracker-Windows-*.zip"
+        retention-days: 30
+
+  # macOS 构建
+  build-macos:
+    name: 🍎 Build macOS
+    runs-on: macos-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Install MAUI workloads
+      run: dotnet workload install maui
+      
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🔨 Build macOS app
+      run: |
+        dotnet publish WorkTimeTracker.UI/WorkTimeTracker.UI.csproj \
+          -f net9.0-maccatalyst \
+          -c Release \
+          -p:PublishProfile=macos \
+          -p:CreatePackage=true \
+          -p:RuntimeIdentifier=maccatalyst-x64 \
+          --output ./publish/macos
+          
+    - name: 📦 Create macOS package
+      run: |
+        VERSION="${{ github.event.release.tag_name || inputs.version }}"
+        
+        # 创建 DMG 包的临时目录
+        mkdir -p ./dmg-temp
+        
+        # 复制应用到临时目录
+        cp -R ./publish/macos/*.app ./dmg-temp/
+        
+        # 创建应用程序链接
+        ln -s /Applications ./dmg-temp/Applications
+        
+        # 创建 README
+        cat > ./dmg-temp/README.txt << EOF
+        WorkTimeTracker for macOS
+        
+        Installation:
+        1. Drag WorkTimeTracker.app to Applications folder
+        2. Open Applications and launch WorkTimeTracker
+        
+        Requirements:
+        - macOS 10.15 or later
+        - .NET 9.0 Runtime (will be installed automatically)
+        
+        Version: $VERSION
+        Build Date: $(date)
+        EOF
+        
+        # 创建 tar.gz 包 (简化版，实际环境中可以创建 DMG)
+        tar -czf "./WorkTimeTracker-macOS-$VERSION.tar.gz" -C ./dmg-temp .
+        
+    - name: 📤 Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-package
+        path: "./WorkTimeTracker-macOS-*.tar.gz"
+        retention-days: 30
+
+  # Linux 构建 (可选)
+  build-linux:
+    name: 🐧 Build Linux
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🔨 Build Linux libraries
+      run: |
+        # 构建核心库（可在 Linux 上使用）
+        dotnet publish WorkTimeTracker.Core/WorkTimeTracker.Core.csproj \
+          -c Release \
+          -p:RuntimeIdentifier=linux-x64 \
+          --self-contained false \
+          --output ./publish/linux/core
+          
+        dotnet publish WorkTimeTracker.Data/WorkTimeTracker.Data.csproj \
+          -c Release \
+          -p:RuntimeIdentifier=linux-x64 \
+          --self-contained false \
+          --output ./publish/linux/data
+          
+    - name: 📦 Create Linux package
+      run: |
+        VERSION="${{ github.event.release.tag_name || inputs.version }}"
+        
+        # 创建 Linux 包目录
+        mkdir -p ./linux-package
+        
+        # 复制库文件
+        cp -R ./publish/linux/* ./linux-package/
+        
+        # 创建文档
+        cat > ./linux-package/README.md << EOF
+        # WorkTimeTracker Libraries for Linux
+        
+        This package contains the core libraries for WorkTimeTracker that can be used on Linux systems.
+        
+        ## Contents
+        - WorkTimeTracker.Core: Business logic library
+        - WorkTimeTracker.Data: Data access library
+        
+        ## Requirements
+        - .NET 9.0 Runtime
+        - SQLite3
+        
+        ## Version
+        $VERSION
+        
+        ## Usage
+        These libraries can be referenced in Linux-based .NET applications.
+        EOF
+        
+        # 创建包
+        tar -czf "./WorkTimeTracker-Linux-Libraries-$VERSION.tar.gz" -C ./linux-package .
+        
+    - name: 📤 Upload Linux artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-package
+        path: "./WorkTimeTracker-Linux-Libraries-*.tar.gz"
+        retention-days: 30
+
+  # 发布到 GitHub Releases
+  create-release:
+    name: 🚀 Create Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-linux]
+    if: github.event_name == 'workflow_dispatch' && inputs.create_release || github.event_name == 'release'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 📦 Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./release-artifacts
+        
+    - name: 📋 Generate release notes
+      run: |
+        VERSION="${{ github.event.release.tag_name || inputs.version }}"
+        
+        cat > release-notes.md << EOF
+        # 🎉 WorkTimeTracker $VERSION
+        
+        一个现代化的工作时间跟踪应用程序，基于 .NET MAUI 构建。
+        
+        ## 📦 下载包
+        
+        ### 桌面应用程序
+        - **Windows 10/11**: \`WorkTimeTracker-Windows-$VERSION.zip\`
+        - **macOS**: \`WorkTimeTracker-macOS-$VERSION.tar.gz\`
+        
+        ### 开发者库
+        - **Linux 库**: \`WorkTimeTracker-Linux-Libraries-$VERSION.tar.gz\`
+        
+        ## 🆕 新功能
+        - ⏰ 工作时间跟踪
+        - 🔔 通知提醒功能
+        - 📊 工作统计和报告
+        - 🎨 现代化 UI 界面
+        - 🔧 自定义设置
+        
+        ## 🛠️ 技术规格
+        - **框架**: .NET 9.0
+        - **UI 框架**: .NET MAUI
+        - **数据库**: SQLite
+        - **支持平台**: Windows, macOS
+        
+        ## 📱 系统要求
+        
+        ### Windows
+        - Windows 10 版本 1809 或更高版本
+        - .NET 9.0 Runtime (自动安装)
+        
+        ### macOS
+        - macOS 10.15 (Catalina) 或更高版本
+        - .NET 9.0 Runtime (自动安装)
+        
+        ## 🚀 安装说明
+        
+        ### Windows
+        1. 下载 \`WorkTimeTracker-Windows-$VERSION.zip\`
+        2. 解压到任意目录
+        3. 运行 \`start.bat\` 或直接运行 \`WorkTimeTracker.UI.exe\`
+        
+        ### macOS
+        1. 下载 \`WorkTimeTracker-macOS-$VERSION.tar.gz\`
+        2. 解压并将 \`WorkTimeTracker.app\` 拖拽到 Applications 文件夹
+        3. 从 Launchpad 或 Applications 文件夹启动应用程序
+        
+        ## 📞 支持与反馈
+        - 🐛 问题报告: [GitHub Issues](https://github.com/your-repo/WorkTimeTracker/issues)
+        - 💡 功能建议: [GitHub Discussions](https://github.com/your-repo/WorkTimeTracker/discussions)
+        
+        ---
+        
+        **构建信息**
+        - 构建时间: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        - 提交哈希: ${{ github.sha }}
+        - 构建环境: GitHub Actions
+        EOF
+        
+    - name: 🚀 Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.release.tag_name || inputs.version }}
+        name: WorkTimeTracker ${{ github.event.release.tag_name || inputs.version }}
+        body_path: release-notes.md
+        files: |
+          ./release-artifacts/windows-package/*
+          ./release-artifacts/macos-package/*
+          ./release-artifacts/linux-package/*
+        draft: false
+        prerelease: ${{ contains(github.event.release.tag_name, 'alpha') || contains(github.event.release.tag_name, 'beta') || contains(github.event.release.tag_name, 'rc') || contains(inputs.version, 'alpha') || contains(inputs.version, 'beta') || contains(inputs.version, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

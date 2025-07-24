@@ -3,6 +3,14 @@
     "Windows Machine": {
       "commandName": "Project",
       "nativeDebugging": false
+    },
+    "macOS Debug": {
+      "commandName": "Project",
+      "nativeDebugging": false,
+      "applicationUrl": "",
+      "environmentVariables": {
+        "DOTNET_MODIFIABLE_ASSEMBLIES": "debug"
+      }
     }
   }
 }

@@ -1,0 +1,50 @@
+{
+  "TestSettings": {
+    "DefaultTimeout": 10,
+    "ScreenshotOnFailure": true,
+    "ScreenshotOnSuccess": false,
+    "LogLevel": "Information",
+    "RetryCount": 2,
+    "RetryDelay": 1000
+  },
+  "AppSettings": {
+    "StartupTimeout": 30,
+    "AppPath": "",
+    "AppArguments": "",
+    "CloseAppAfterTest": true
+  },
+  "NotificationTestData": {
+    "TestLanguages": ["zh-CN", "en-US", "ja-JP"],
+    "TestFrequencies": [5, 15, 30, 60],
+    "TestVolumes": [0.1, 0.5, 0.8, 1.0],
+    "DoNotDisturbTimeRanges": [
+      { "Start": "22:00", "End": "08:00" },
+      { "Start": "12:00", "End": "13:00" },
+      { "Start": "00:00", "End": "06:00" }
+    ]
+  },
+  "WorkSessionTestData": {
+    "TestDescriptions": [
+      "软件开发工作",
+      "会议讨论",
+      "文档编写",
+      "代码审查",
+      "测试工作"
+    ],
+    "TestProjects": [
+      "移动应用项目",
+      "Web开发项目",
+      "数据分析项目",
+      "UI/UX设计项目",
+      "质量保证项目"
+    ],
+    "WorkSessionDurations": [1000, 2000, 3000, 5000]
+  },
+  "PerformanceThresholds": {
+    "MaxStartupTime": 30000,
+    "MaxPageLoadTime": 10000,
+    "MaxButtonResponseTime": 5000,
+    "MaxNavigationTime": 8000,
+    "MaxSaveTime": 5000
+  }
+}

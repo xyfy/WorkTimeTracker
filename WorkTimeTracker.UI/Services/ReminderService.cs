@@ -1,7 +1,4 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.Maui.Controls;
-using Plugin.LocalNotification;
 using WorkTimeTracker.Core.Interfaces;
 
 namespace WorkTimeTracker.UI.Services
@@ -9,16 +6,27 @@ namespace WorkTimeTracker.UI.Services
     public class ReminderService
     {
         private readonly IWorkTimeService _workTimeService;
+        private readonly INotificationService _notificationService;
 
         public event Action<TimeSpan>? OnTimeRemainingChanged;
-        public event Action<string>? OnSegmentChanged;
+        public event Action<string>? OnSegmentCompleted; // 段落完成事件
 
-        public ReminderService(IWorkTimeService workTimeService)
+        public ReminderService(IWorkTimeService workTimeService, INotificationService notificationService)
         {
             _workTimeService = workTimeService;
+            _notificationService = notificationService;
             _workTimeService.OnTimeRemainingChanged += (timeSpan) =>
             {
                 OnTimeRemainingChanged?.Invoke(timeSpan);
+            };
+            _workTimeService.OnSegmentCompleted += async (message) =>
+            {
+                OnSegmentCompleted?.Invoke(message);
+                // 自动发送通知和语音播报
+                if (_notificationService != null)
+                {
+                    await _notificationService.ShowCustomNotificationAsync(message);
+                }
             };
         }
 
@@ -38,14 +46,26 @@ namespace WorkTimeTracker.UI.Services
 
         public async Task StartWorkAsync()
         {
-            await _workTimeService.StartWorkAsync();
-            await SpeakAsync("开始工作");
+            try
+            {
+                await _workTimeService.StartWorkAsync();
+                
+                if (_notificationService != null)
+                {
+                    await _notificationService.ShowWorkStartNotificationAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ReminderService.StartWorkAsync 异常: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task StopWorkAsync()
         {
             await _workTimeService.StopWorkAsync();
-            await SpeakAsync("工作结束");
+            await _notificationService.ShowWorkEndNotificationAsync();
         }
 
         public async Task<string> GetDailyWorkTimeAsync()
@@ -55,28 +75,20 @@ namespace WorkTimeTracker.UI.Services
 
         public async Task SpeakAsync(string text)
         {
-            try
-            {
-                await TextToSpeech.SpeakAsync(text);
-            }
-            catch
-            {
-                // 如果 TTS 失败，使用本地通知作为备选
-                var notification = new NotificationRequest
-                {
-                    NotificationId = 1001,
-                    Title = "WorkTimeTracker",
-                    Subtitle = text,
-                    Description = text,
-                    BadgeNumber = 1
-                };
-                await LocalNotificationCenter.Current.Show(notification);
-            }
+            await _notificationService.ShowCustomNotificationAsync(text);
         }
 
         public void StartWork()
         {
-            _ = Task.Run(async () => await StartWorkAsync());
+            try
+            {
+                _ = Task.Run(async () => await StartWorkAsync());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"StartWork 同步方法异常: {ex.Message}");
+                throw;
+            }
         }
 
         public void EndWork()

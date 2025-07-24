@@ -1,0 +1,253 @@
+name: Maintenance
+
+on:
+  schedule:
+    # 每周一早上 8:00 UTC 运行
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+
+jobs:
+  # 依赖项安全扫描
+  security-scan:
+    name: 🔐 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Restore dependencies
+      run: dotnet restore WorkTimeTracker.sln
+      
+    - name: 🔐 Check for vulnerable packages
+      run: |
+        echo "## 🔐 安全扫描报告" >> $GITHUB_STEP_SUMMARY
+        echo "扫描时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 检查已知漏洞
+        VULNERABLE_PACKAGES=$(dotnet list package --vulnerable --include-transitive 2>&1)
+        
+        if echo "$VULNERABLE_PACKAGES" | grep -q "has the following vulnerable packages"; then
+          echo "❌ **发现安全漏洞**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$VULNERABLE_PACKAGES" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit 1
+        else
+          echo "✅ **未发现安全漏洞**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: 📊 Generate security report
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🔐 安全漏洞报告 - ' + new Date().toISOString().split('T')[0],
+            body: `## 安全扫描发现漏洞
+            
+            在定期安全扫描中发现了依赖项漏洞。
+            
+            **扫描时间**: ${new Date().toLocaleString()}
+            **工作流**: ${context.workflow}
+            **运行ID**: ${context.runId}
+            
+            请查看工作流日志获取详细信息，并及时更新相关依赖项。
+            
+            ## 建议操作
+            1. 查看工作流日志中的漏洞详情
+            2. 更新受影响的 NuGet 包
+            3. 重新运行测试确保功能正常
+            4. 提交更新的依赖项
+            `,
+            labels: ['security', 'dependencies', 'maintenance']
+          })
+
+  # 依赖项更新检查
+  dependency-update:
+    name: 📦 Dependency Update Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📦 Check for outdated packages
+      run: |
+        echo "## 📦 依赖项更新检查" >> $GITHUB_STEP_SUMMARY
+        echo "检查时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 检查过时的包
+        OUTDATED_PACKAGES=$(dotnet list package --outdated 2>&1)
+        
+        if echo "$OUTDATED_PACKAGES" | grep -q "has the following outdated packages"; then
+          echo "📋 **发现可更新的包**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$OUTDATED_PACKAGES" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ **所有包都是最新版本**" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: 🔄 Create update issue
+      if: contains(steps.*.outputs.*, 'outdated packages')
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '📦 依赖项更新建议 - ' + new Date().toISOString().split('T')[0],
+            body: `## 依赖项更新检查
+            
+            定期扫描发现了可更新的依赖项。
+            
+            **检查时间**: ${new Date().toLocaleString()}
+            **工作流**: ${context.workflow}
+            **运行ID**: ${context.runId}
+            
+            请查看工作流日志获取可更新包的详细信息。
+            
+            ## 建议操作
+            1. 查看工作流摘要中的更新列表
+            2. 逐个评估更新的必要性和兼容性
+            3. 创建专门的 PR 进行依赖项更新
+            4. 确保所有测试通过后合并
+            
+            ## 注意事项
+            - 主版本更新可能包含破坏性变更
+            - 建议在测试环境中先验证更新
+            - 关注安全更新的优先级
+            `,
+            labels: ['dependencies', 'maintenance', 'enhancement']
+          })
+
+  # 代码质量报告
+  code-quality-report:
+    name: 📊 Code Quality Report
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 需要完整历史用于趋势分析
+        
+    - name: 🔧 Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        
+    - name: 📊 Analyze code metrics
+      run: |
+        echo "## 📊 代码质量报告" >> $GITHUB_STEP_SUMMARY
+        echo "报告时间: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 统计代码行数
+        TOTAL_CS_FILES=$(find . -name "*.cs" -not -path "./bin/*" -not -path "./obj/*" -not -path "./.git/*" | wc -l)
+        TOTAL_LINES=$(find . -name "*.cs" -not -path "./bin/*" -not -path "./obj/*" -not -path "./.git/*" -exec wc -l {} + | tail -1 | awk '{print $1}')
+        
+        echo "### 📈 代码统计" >> $GITHUB_STEP_SUMMARY
+        echo "- **C# 文件数**: $TOTAL_CS_FILES" >> $GITHUB_STEP_SUMMARY
+        echo "- **总代码行数**: $TOTAL_LINES" >> $GITHUB_STEP_SUMMARY
+        
+        # 项目结构分析
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🏗️ 项目结构" >> $GITHUB_STEP_SUMMARY
+        for project in WorkTimeTracker.Core WorkTimeTracker.Data WorkTimeTracker.UI WorkTimeTracker.Tests WorkTimeTracker.UITests; do
+          if [ -d "$project" ]; then
+            FILES=$(find "$project" -name "*.cs" | wc -l)
+            LINES=$(find "$project" -name "*.cs" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
+            echo "- **$project**: $FILES 文件, $LINES 行" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+        
+        # 最近提交活动
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔄 最近活动" >> $GITHUB_STEP_SUMMARY
+        COMMITS_LAST_WEEK=$(git rev-list --count --since="1 week ago" HEAD)
+        COMMITS_LAST_MONTH=$(git rev-list --count --since="1 month ago" HEAD)
+        echo "- **最近一周提交数**: $COMMITS_LAST_WEEK" >> $GITHUB_STEP_SUMMARY
+        echo "- **最近一月提交数**: $COMMITS_LAST_MONTH" >> $GITHUB_STEP_SUMMARY
+        
+    - name: 🧪 Test coverage analysis
+      run: |
+        # 运行测试以获取覆盖率信息
+        dotnet restore WorkTimeTracker.sln
+        
+        # 运行单元测试
+        if [ -d "WorkTimeTracker.Tests" ]; then
+          TEST_RESULT=$(dotnet test WorkTimeTracker.Tests/WorkTimeTracker.Tests.csproj --verbosity quiet --logger "console;verbosity=minimal" 2>&1)
+          TEST_COUNT=$(echo "$TEST_RESULT" | grep -o "Total tests: [0-9]*" | grep -o "[0-9]*" || echo "0")
+          PASSED_COUNT=$(echo "$TEST_RESULT" | grep -o "Passed: [0-9]*" | grep -o "[0-9]*" || echo "0")
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧪 测试覆盖率" >> $GITHUB_STEP_SUMMARY
+          echo "- **单元测试数量**: $TEST_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "- **通过测试数量**: $PASSED_COUNT" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$TEST_COUNT" -gt 0 ]; then
+            SUCCESS_RATE=$(( PASSED_COUNT * 100 / TEST_COUNT ))
+            echo "- **测试通过率**: $SUCCESS_RATE%" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+
+  # 清理过期工件
+  cleanup-artifacts:
+    name: 🧹 Cleanup Artifacts
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🧹 Delete old artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // 获取所有工件
+          const artifacts = await github.rest.actions.listArtifactsForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+          
+          // 删除超过30天的工件
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          let deletedCount = 0;
+          
+          for (const artifact of artifacts.data.artifacts) {
+            const createdAt = new Date(artifact.created_at);
+            if (createdAt < thirtyDaysAgo) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+              });
+              deletedCount++;
+            }
+          }
+          
+          console.log(`🧹 清理了 ${deletedCount} 个过期工件`);
+          
+          // 记录到摘要
+          core.summary.addHeading('🧹 工件清理报告', 2);
+          core.summary.addRaw(`清理了 ${deletedCount} 个超过30天的工件`);
+          core.summary.addRaw(`\n清理时间: ${new Date().toLocaleString()}`);
+          await core.summary.write();

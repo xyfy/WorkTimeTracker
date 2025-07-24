@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using AVFoundation;
 
-namespace Phoneword
+namespace WorkTimeTracker.UI.Platforms.MacCatalyst
 {
     public static class MacTextToSpeech
     {
@@ -10,7 +10,8 @@ namespace Phoneword
         {
             var utterance = new AVSpeechUtterance(text)
             {
-                Volume = volume
+                Volume = volume,
+                Rate = 0.5f  // 适中的语速
             };
             var synthesizer = new AVSpeechSynthesizer();
             synthesizer.SpeakUtterance(utterance);

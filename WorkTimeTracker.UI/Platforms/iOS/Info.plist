@@ -25,8 +25,18 @@
 			<string>UIInterfaceOrientationPortraitUpsideDown</string>
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
-		</array>		<key>NSSpeechRecognitionUsageDescription</key>
-		<string>WorkTimeTracker uses speech recognition for voice reminders and notifications</string>
+		</array>
+		
+		<!-- 应用程序显示名称 -->
+		<key>CFBundleDisplayName</key>
+		<string>工作计时器</string>
+		
+		<!-- 应用程序名称 -->
+		<key>CFBundleName</key>
+		<string>工作计时器</string>
+		
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>工作计时器使用语音功能来提供工作和休息提醒</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>WorkTimeTracker uses microphone for voice commands and TTS feedback</string>
 		<key>NSUserNotificationsUsageDescription</key>

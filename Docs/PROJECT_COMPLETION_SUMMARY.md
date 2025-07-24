@@ -61,8 +61,8 @@
 
 ### 核心架构
 
-- **WorkTimeTracker.Core** - 业务逻辑层 (netstandard2.0)
-- **WorkTimeTracker.Data** - 数据访问层 (netstandard2.0)
+- **WorkTimeTracker.Core** - 业务逻辑层 (net9.0)
+- **WorkTimeTracker.Data** - 数据访问层 (net9.0)
 - **WorkTimeTracker.UI** - 用户界面层 (net9.0-android、net9.0-ios、net9.0-maccatalyst、net9.0-windows)
 - **WorkTimeTracker.Tests** - 单元测试项目 (net8.0)
 
