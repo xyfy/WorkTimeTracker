@@ -10,6 +10,7 @@ namespace WorkTimeTracker.Core.Interfaces
         bool IsWorking { get; }
         
         event Action<TimeSpan> OnTimeRemainingChanged;
+        event Action<string> OnSegmentCompleted; // 新增：段落完成事件
         
         Task StartWorkAsync();
         Task StopWorkAsync();

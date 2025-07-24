@@ -15,6 +15,7 @@ public partial class MainPage : ContentPage
         InitializeComponent();
         _reminderService = reminderService;
         _reminderService.OnTimeRemainingChanged += UpdateRemainingTime;
+        _reminderService.OnSegmentCompleted += OnSegmentCompleted; // 订阅段落完成事件
     }
 
     private void UpdateRemainingTime(TimeSpan remainingTime)
@@ -25,26 +26,46 @@ public partial class MainPage : ContentPage
         });
     }
 
-    protected override void OnAppearing()
+    private void OnSegmentCompleted(string message)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            // 可以在这里添加UI反馈，比如显示消息
+            System.Diagnostics.Debug.WriteLine($"段落完成: {message}");
+        });
+    }
+
+    protected override async void OnAppearing()
     {
         base.OnAppearing();
         // 加载配置
         WorkDurationEntry.Text = Preferences.Get("WorkDuration", "50");
         RestDurationEntry.Text = Preferences.Get("RestDuration", "10");
 
-        // 计算距离下一整分钟的延迟
-        DateTime now = DateTime.Now;
-        DateTime nextMinute = now.AddMinutes(1).AddSeconds(-now.Second).AddMilliseconds(-now.Millisecond);
-        TimeSpan initialDelay = nextMinute - now;
+        // 立即更新一次每日工作时间
+        await UpdateDailyWorkTimeAsync();
 
+        // 启动定时器，每30秒更新一次每日工作时间
         _timer = new System.Threading.Timer(async state =>
+        {
+            await UpdateDailyWorkTimeAsync();
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+    }
+
+    private async Task UpdateDailyWorkTimeAsync()
+    {
+        try
         {
             var time = await _reminderService.GetDailyWorkTimeAsync();
             MainThread.BeginInvokeOnMainThread(() =>
             {
                 TotalWorkTimeLabel.Text = time;
             });
-        }, null, initialDelay, TimeSpan.FromMinutes(1));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"更新每日工作时间失败: {ex.Message}");
+        }
     }
 
     protected override void OnDisappearing()
@@ -106,6 +127,28 @@ public partial class MainPage : ContentPage
         if (notificationService != null)
         {
             await Navigation.PushAsync(new NotificationSettingsPage(notificationService));
+        }
+    }
+
+    // 语音测试功能
+    private async void OnTestVoiceClicked(object sender, EventArgs e)
+    {
+        try
+        {
+            var notificationService = (Application.Current as App)?.Services.GetService<INotificationService>();
+            if (notificationService != null)
+            {
+                await notificationService.ShowCustomNotificationAsync("这是一个语音测试");
+                await DisplayAlert("语音测试", "语音测试已发送", "确定");
+            }
+            else
+            {
+                await DisplayAlert("错误", "无法获取通知服务", "确定");
+            }
+        }
+        catch (Exception ex)
+        {
+            await DisplayAlert("错误", $"测试语音失败: {ex.Message}", "确定");
         }
     }
 }

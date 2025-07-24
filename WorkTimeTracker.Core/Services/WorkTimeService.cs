@@ -25,6 +25,7 @@ namespace WorkTimeTracker.Core.Services
         public bool IsWorking => isWorking;
 
         public event Action<TimeSpan>? OnTimeRemainingChanged;
+        public event Action<string>? OnSegmentCompleted; // 新增：段落完成事件
 
         public WorkTimeService(IWorkRecordRepository workRecordRepository)
         {
@@ -37,7 +38,12 @@ namespace WorkTimeTracker.Core.Services
             isWorking = true;
             sessionWorkTime = TimeSpan.Zero;
             cancellationTokenSource = new CancellationTokenSource();
-            await Task.Run(() => ProcessSegments(cancellationTokenSource.Token));
+            
+            // 启动后台任务，不等待完成
+            _ = Task.Run(() => ProcessSegments(cancellationTokenSource.Token));
+            
+            // 立即返回，允许后续的通知代码执行
+            await Task.CompletedTask;
         }
 
         public async Task StopWorkAsync()
@@ -82,10 +88,13 @@ namespace WorkTimeTracker.Core.Services
                         sessionWorkTime += TimeSpan.FromSeconds(delta);
                         await UpdateDBWorkRecordForWorkDeltaAsync(delta);
                     }
-                    await Task.Delay(5000, token);
+                    await Task.Delay(1000, token); // 改为每秒更新一次
                 }
 
                 if (!isWorking) break;
+                
+                // 工作时间结束，触发通知
+                OnSegmentCompleted?.Invoke("工作时间结束，开始休息！");
 
                 // 休息倒计时周期
                 currentSegmentName = "休息时间";
@@ -108,10 +117,13 @@ namespace WorkTimeTracker.Core.Services
                         sessionWorkTime += TimeSpan.FromSeconds(delta);
                         await UpdateDBWorkRecordForRestDeltaAsync(delta);
                     }
-                    await Task.Delay(5000, token);
+                    await Task.Delay(1000, token); // 改为每秒更新一次
                 }
                 
                 if (!isWorking) break;
+                
+                // 休息时间结束，触发通知
+                OnSegmentCompleted?.Invoke("休息时间结束，开始工作！");
             }
         }
 

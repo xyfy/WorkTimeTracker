@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.Maui.Controls;
 using Plugin.LocalNotification;
 using WorkTimeTracker.Core.Models;
@@ -18,10 +16,11 @@ namespace WorkTimeTracker.UI.Services
         public EnhancedNotificationService()
         {
             _settings = new NotificationSettings();
-            _ = LoadSettingsAsync();
+            // 同步加载设置
+            LoadSettingsSync();
         }
 
-        public Task LoadSettingsAsync()
+        private void LoadSettingsSync()
         {
             try
             {
@@ -30,6 +29,7 @@ namespace WorkTimeTracker.UI.Services
                 {
                     _settings = JsonSerializer.Deserialize<NotificationSettings>(settingsJson) ?? new NotificationSettings();
                 }
+                System.Diagnostics.Debug.WriteLine($"设置加载完成: WorkStartMessage='{_settings.WorkStartMessage}'");
             }
             catch (Exception ex)
             {
@@ -37,6 +37,11 @@ namespace WorkTimeTracker.UI.Services
                 _settings = new NotificationSettings();
                 System.Diagnostics.Debug.WriteLine($"Failed to load notification settings: {ex.Message}");
             }
+        }
+
+        public Task LoadSettingsAsync()
+        {
+            LoadSettingsSync();
             return Task.CompletedTask;
         }
 
@@ -57,6 +62,10 @@ namespace WorkTimeTracker.UI.Services
 
         public async Task ShowWorkStartNotificationAsync()
         {
+            System.Diagnostics.Debug.WriteLine("=== ShowWorkStartNotificationAsync 被调用 ===");
+            System.Diagnostics.Debug.WriteLine($"WorkStartMessage: '{_settings.WorkStartMessage}'");
+            System.Diagnostics.Debug.WriteLine($"VoiceReminderEnabled: {_settings.VoiceReminderEnabled}");
+            System.Diagnostics.Debug.WriteLine($"SystemNotificationEnabled: {_settings.SystemNotificationEnabled}");
             await ShowNotificationAsync(_settings.WorkStartMessage, "开始工作周期");
         }
 
@@ -77,35 +86,49 @@ namespace WorkTimeTracker.UI.Services
 
         public async Task ShowCustomNotificationAsync(string message)
         {
-            await ShowNotificationAsync(message, "WorkTimeTracker");
+            await ShowNotificationAsync(message, "工作计时器");
         }
 
         private async Task ShowNotificationAsync(string message, string subtitle)
         {
+            System.Diagnostics.Debug.WriteLine($"=== ShowNotificationAsync 被调用 ===");
+            System.Diagnostics.Debug.WriteLine($"消息: {message}");
+            System.Diagnostics.Debug.WriteLine($"副标题: {subtitle}");
+            System.Diagnostics.Debug.WriteLine($"语音提醒启用: {_settings.VoiceReminderEnabled}");
+            System.Diagnostics.Debug.WriteLine($"系统通知启用: {_settings.SystemNotificationEnabled}");
+            System.Diagnostics.Debug.WriteLine($"音量: {_settings.VoiceVolume}");
+            
             if (IsInDoNotDisturbPeriod())
+            {
+                System.Diagnostics.Debug.WriteLine("当前处于免打扰时段，跳过通知");
                 return;
+            }
 
             // 语音提醒
             if (_settings.VoiceReminderEnabled)
             {
+                System.Diagnostics.Debug.WriteLine("开始语音提醒");
                 await ShowVoiceNotificationAsync(message);
             }
 
             // 系统通知
             if (_settings.SystemNotificationEnabled)
             {
+                System.Diagnostics.Debug.WriteLine("开始系统通知");
                 await ShowSystemNotificationAsync(message, subtitle);
             }
 
             // 前台弹窗提醒
             if (_settings.ForegroundPopupEnabled)
             {
+                System.Diagnostics.Debug.WriteLine("开始前台弹窗");
                 await ShowForegroundPopupAsync(message);
             }
 
             // 桌面通知（在系统通知中实现）
             if (_settings.DesktopNotificationEnabled && !_settings.SystemNotificationEnabled)
             {
+                System.Diagnostics.Debug.WriteLine("开始桌面通知");
                 await ShowSystemNotificationAsync(message, subtitle);
             }
         }
@@ -114,16 +137,29 @@ namespace WorkTimeTracker.UI.Services
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine($"=== ShowVoiceNotificationAsync 开始 ===");
+                System.Diagnostics.Debug.WriteLine($"消息: {message}");
+                System.Diagnostics.Debug.WriteLine($"音量: {_settings.VoiceVolume}");
+                
+#if MACCATALYST
+                // 在 macOS 上使用自定义的语音服务
+                System.Diagnostics.Debug.WriteLine("使用 macOS 自定义语音服务");
+                await WorkTimeTracker.UI.Platforms.MacCatalyst.MacTextToSpeech.SpeakAsync(message, (float)_settings.VoiceVolume);
+#else
+                // 在其他平台使用 MAUI 内置语音服务
+                System.Diagnostics.Debug.WriteLine("使用 MAUI 内置语音服务");
                 var speechSettings = new SpeechOptions
                 {
                     Volume = (float)_settings.VoiceVolume
                 };
-
                 await TextToSpeech.SpeakAsync(message, speechSettings);
+#endif
+                System.Diagnostics.Debug.WriteLine("语音播放完成");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Voice notification failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"异常详情: {ex}");
                 // 如果语音失败，回退到系统通知
                 await ShowSystemNotificationAsync(message, "语音提醒失败");
             }
@@ -133,10 +169,41 @@ namespace WorkTimeTracker.UI.Services
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine($"=== ShowSystemNotificationAsync 开始 ===");
+                System.Diagnostics.Debug.WriteLine($"消息: {message}");
+                System.Diagnostics.Debug.WriteLine($"副标题: {subtitle}");
+
+#if MACCATALYST
+                // 在 macOS 上使用原生通知
+                System.Diagnostics.Debug.WriteLine("使用 macOS 原生通知");
+                var success = await WorkTimeTracker.UI.Platforms.MacCatalyst.MacNotificationHelper.ShowNotificationAsync(
+                    "工作计时器", subtitle, message);
+                
+                if (!success)
+                {
+                    System.Diagnostics.Debug.WriteLine("macOS 原生通知失败，尝试 Plugin.LocalNotification");
+                    await ShowPluginNotificationAsync(message, subtitle);
+                }
+#else
+                // 在其他平台使用 Plugin.LocalNotification
+                System.Diagnostics.Debug.WriteLine("使用 Plugin.LocalNotification");
+                await ShowPluginNotificationAsync(message, subtitle);
+#endif
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"System notification failed: {ex.Message}");
+            }
+        }
+
+        private async Task ShowPluginNotificationAsync(string message, string subtitle)
+        {
+            try
+            {
                 var notification = new NotificationRequest
                 {
                     NotificationId = DateTime.Now.GetHashCode(),
-                    Title = "WorkTimeTracker",
+                    Title = "工作计时器",
                     Subtitle = subtitle,
                     Description = message,
                     BadgeNumber = 1,
@@ -144,10 +211,11 @@ namespace WorkTimeTracker.UI.Services
                 };
 
                 await LocalNotificationCenter.Current.Show(notification);
+                System.Diagnostics.Debug.WriteLine("Plugin 通知已发送");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"System notification failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Plugin notification failed: {ex.Message}");
             }
         }
 
@@ -164,7 +232,7 @@ namespace WorkTimeTracker.UI.Services
                         var currentPage = app.Windows[0].Page;
                         if (currentPage != null)
                         {
-                            await currentPage.DisplayAlert("WorkTimeTracker", message, "确定");
+                            await currentPage.DisplayAlert("工作计时器", message, "确定");
                         }
                     }
                 });
